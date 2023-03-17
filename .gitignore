@@ -1,0 +1,7 @@
+__pycache__/
+myenv/
+
+api_keys.db
+audio.mp3
+output.wav
+gpt3.py
