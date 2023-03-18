@@ -5,9 +5,10 @@ from discord import FFmpegPCMAudio
 import wave
 import asyncio
 import os
+import openai
 
 from whisper_transcribe import transcribe_with_whisper
-from eleven_labs import send_to_eleven_labs
+from eleven_labs import send_to_eleven_labs, UnauthorizedError
 from chatgpt import send_to_chatgpt
 from play_audio import play_audio
 from sqlite_database import setup_database, store_elevenlabs_api_key, get_elevenlabs_api_key, store_openai_api_key, get_openai_api_key, view_database_entries
@@ -17,8 +18,6 @@ intents = discord.Intents.all()
 intents.members = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-elevenlabs_api_key = ""
-openai_api_key = ""
 active_voice_id = voices_dictionary['Dumbledore'][0]
 
 async def play(ctx):
@@ -55,31 +54,52 @@ async def once_done(sink: discord.sinks, channel: discord.TextChannel, *args):  
     await update_embed(ctx, transcription=recording_transcription)
     message_list.append({"role": "user", "content": recording_transcription})
 
-    
-    # AI Response
-    print('\nSending to ChatGPT...')
-    await update_embed(ctx, 'Sending to ChatGPT...')
-    chat_gpt_response = send_to_chatgpt(openai_api_key, message_list)
-    print('\nSending to ElevenLabs...\n')
-    await update_embed(ctx, 'Sending to ElevenLabs...')
-    send_to_eleven_labs(chat_gpt_response, active_voice_id, elevenlabs_api_key)  
-    message_list.append({"role": "assistant", "content": chat_gpt_response})
-    for message in message_list:
-        print(message['role'] + ': ' + message['content'])
+    try:
+        # AI Response
+        print('\nSending to ChatGPT...')
+        await update_embed(ctx, 'Sending to ChatGPT...')
+        chat_gpt_response = send_to_chatgpt(get_openai_api_key(conn, ctx.guild.id), message_list)
+        print('\nSending to ElevenLabs...\n')
+        await update_embed(ctx, 'Sending to ElevenLabs...')
+        send_to_eleven_labs(chat_gpt_response, active_voice_id, '222')   #get_elevenlabs_api_key(conn, ctx.guild.id)
+        message_list.append({"role": "assistant", "content": chat_gpt_response})
+        for message in message_list:
+            print(message['role'] + ': ' + message['content'])
 
-    await update_embed(ctx, status='', transcription=recording_transcription, response=chat_gpt_response)
-    await play(ctx) # Args[0] is the voice channel context
+        await update_embed(ctx, status='', transcription=recording_transcription, response=chat_gpt_response)
+        await play(ctx) # Args[0] is the voice channel context
+    except openai.error.AuthenticationError as e:
+        await update_embed(ctx, "⚠️ Your OpenAI API key is invalid. Please use the !setup command to set a valid OpenAI API key.")
+    except UnauthorizedError as e:        
+        await update_embed(ctx, "⚠️ Your ElevenLabs API key is invalid. Please use the !setup command to set a valid ElevenLabs API key.")
+
+async def send_instructions_embed(ctx, service_name, instructions, image_url):
+    embed = discord.Embed(
+        title=f"Find your {service_name} API key",
+        description=instructions,
+        color=discord.Color.blue()
+    )
+    embed.set_image(url=image_url)
+    await ctx.author.send(embed=embed)
+
 
 @bot.command()
 async def setup(ctx):
     def check(message):
         return message.author == ctx.author and isinstance(message.channel, discord.DMChannel)
-
+    
     # Ask for ElevenLabs API key
+    elevenlabs_instructions = (
+        "1. Log in to your ElevenLabs account at https://beta.elevenlabs.io/\n"
+        "2. Click on your profile picture and then Profile.\n"
+        "3. Click on the eye icon next to your API key to reveal it.\n"
+        "3. Copy your API key and paste it here."
+    )
+    elevenlabs_image_url = "https://i.imgur.com/HmF5DP9.png"
+    await send_instructions_embed(ctx, "ElevenLabs", elevenlabs_instructions, elevenlabs_image_url)
     await ctx.author.send("Please provide your ElevenLabs API key:")
     try:
         elevenlabs_api_key_message = await bot.wait_for('message', check=check, timeout=60)
-        global elevenlabs_api_key
         elevenlabs_api_key = elevenlabs_api_key_message.content
         store_elevenlabs_api_key(conn, ctx.guild.id, elevenlabs_api_key)
     except asyncio.TimeoutError:
@@ -87,19 +107,21 @@ async def setup(ctx):
         return
 
     # Ask for OpenAI API key
+    openai_instructions = (
+        "1. Log in to your OpenAI account at https://platform.openai.com/account/api-keys/\n"
+        "2. Click *Create new secret key*.\n"
+        "3. Copy your API key and paste it here."
+    )
+    openai_image_url = "https://i.imgur.com/ONvQFiQ.png"
+    await send_instructions_embed(ctx, "OpenAI", openai_instructions, openai_image_url)
     await ctx.author.send("Please provide your OpenAI API key:")
     try:
         openai_api_key_message = await bot.wait_for('message', check=check, timeout=60)
-        global openai_api_key
         openai_api_key = openai_api_key_message.content
         store_openai_api_key(conn, ctx.guild.id, openai_api_key)
         await ctx.author.send("API keys saved successfully!")
     except asyncio.TimeoutError:
         await ctx.author.send("OpenAI API key request timed out. Please try the setup command again.")
-
-
-    view_database_entries(conn)
-
 
 
 connections = {}
@@ -185,17 +207,17 @@ message_id = 0
 
 @bot.command()
 async def start(ctx):
+
+    # Check if the API keys are set up
+    elevenlabs_api_key = get_elevenlabs_api_key(conn, ctx.guild.id)
+    openai_api_key = get_openai_api_key(conn, ctx.guild.id)
+
+    if not elevenlabs_api_key or not openai_api_key:
+        await ctx.send("API keys are not set up properly. Please use the `!setup` command to configure them.")
+        return
+
     # Start only if the user is in a voice channel
     if ctx.author.voice:
-
-        # Get and store api keys if they aren't already stored
-        global elevenlabs_api_key
-        global openai_api_key
-        if not elevenlabs_api_key:
-            elevenlabs_api_key = get_elevenlabs_api_key(conn, ctx.guild.id)
-        if not openai_api_key:
-            openai_api_key = get_openai_api_key(conn, ctx.guild.id)
-
 
         await ctx.send(view=MyView(ctx))
 

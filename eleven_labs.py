@@ -2,6 +2,9 @@ import requests
 
 AUDIO_FILE_PATH = './audio.mp3'
 
+class UnauthorizedError(Exception):
+    pass
+
 def send_to_eleven_labs(input_text, voice_id, api_key, audio_file_path=AUDIO_FILE_PATH):
     headers = {
         'accept': 'audio/mpeg',
@@ -23,6 +26,9 @@ def send_to_eleven_labs(input_text, voice_id, api_key, audio_file_path=AUDIO_FIL
         with open(AUDIO_FILE_PATH, 'wb') as f:
             f.write(response.content)
         # print('Audio file saved:', AUDIO_FILE_PATH)
+    elif response.status_code == 401:
+        raise UnauthorizedError("Unauthorized access. Please check your API key.")
 
     else:
         print('Request failed with status code', response.status_code)
+
