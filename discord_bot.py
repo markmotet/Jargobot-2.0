@@ -46,28 +46,27 @@ async def once_done(sink: discord.sinks, channel: discord.TextChannel, *args):  
         with open("output.wav", "wb") as f:
             f.write(audio.file.getbuffer())
 
-    # User response
-    print('Transcribing...')
-    await update_embed(ctx, 'Transcribing...')
-
-    recording_transcription = transcribe_with_whisper("./output.wav")
-    await update_embed(ctx, transcription=recording_transcription)
-    message_list.append({"role": "user", "content": recording_transcription})
-
     try:
-        # AI Response
+        print('Transcribing...')
+        await update_embed(ctx, '✍️ Transcribing...')
+        recording_transcription = transcribe_with_whisper("./output.wav")
+
         print('\nSending to ChatGPT...')
-        await update_embed(ctx, 'Sending to ChatGPT...')
+        await update_embed(ctx, '🤖 Sending to ChatGPT...', transcription=recording_transcription)
+        message_list.append({"role": "user", "content": recording_transcription})
         chat_gpt_response = send_to_chatgpt(get_openai_api_key(conn, ctx.guild.id), message_list)
+
         print('\nSending to ElevenLabs...\n')
-        await update_embed(ctx, 'Sending to ElevenLabs...')
-        send_to_eleven_labs(chat_gpt_response, active_voice_id, '222')   #get_elevenlabs_api_key(conn, ctx.guild.id)
+        await update_embed(ctx, '💬 Sending to ElevenLabs...', response=chat_gpt_response)
+
+        send_to_eleven_labs(chat_gpt_response, active_voice_id, get_elevenlabs_api_key(conn, ctx.guild.id))
         message_list.append({"role": "assistant", "content": chat_gpt_response})
         for message in message_list:
             print(message['role'] + ': ' + message['content'])
 
-        await update_embed(ctx, status='', transcription=recording_transcription, response=chat_gpt_response)
+        await update_embed(ctx, '🔊 Playing audio...', )
         await play(ctx) # Args[0] is the voice channel context
+        await update_embed(ctx, '')
     except openai.error.AuthenticationError as e:
         await update_embed(ctx, "⚠️ Your OpenAI API key is invalid. Please use the !setup command to set a valid OpenAI API key.")
     except UnauthorizedError as e:        
@@ -128,7 +127,7 @@ connections = {}
 @bot.command()
 async def record(ctx):  # If you're using commands.Bot, this will also work.
     
-    await update_embed(ctx, 'Recording...', transcription='-----',response='-----')
+    await update_embed(ctx, '🔴 Recording...', transcription='-----',response='-----')
 
     voice = ctx.author.voice
 
@@ -160,7 +159,8 @@ class MyView(discord.ui.View):
     def __init__(self, ctx):
         super().__init__()
         self.ctx = ctx
-    
+        self.is_recording = False  # Add an attribute to track the button's state
+
     all_options = []
 
     for name, info in voices_dictionary.items():
@@ -170,14 +170,13 @@ class MyView(discord.ui.View):
         )
         all_options.append(option)
 
-    @discord.ui.select( # the decorator that lets you specify the properties of the select menu
-            placeholder = "Select AI Character...", # the placeholder text that will be displayed if nothing is selected
-            min_values = 1, # the minimum number of values that must be selected by the users
-            max_values = 1, # the maximum number of values that can be selected by the users
-
-            options = all_options
-        )
-    async def select_callback(self, select, interaction): # the function called when the user is done selecting options
+    @discord.ui.select(  # the decorator that lets you specify the properties of the select menu
+            placeholder="Select AI Character...",  # the placeholder text that will be displayed if nothing is selected
+            min_values=1,  # the minimum number of values that must be selected by the users
+            max_values=1,  # the maximum number of values that can be selected by the users
+            options=all_options
+    )
+    async def select_callback(self, select, interaction):  # the function called when the user is done selecting options
         await interaction.response.defer()
         global active_voice_id
         global role_message
@@ -185,19 +184,27 @@ class MyView(discord.ui.View):
         role_message = voices_dictionary[select.values[0]][1]
         await wipe_memory(self.ctx)
 
-    @discord.ui.button(label="Start Recording", style=discord.ButtonStyle.primary, emoji="🔴")
-    async def button_callback_1(self, button, interaction):
+    @discord.ui.button(label="Start Recording", style=discord.ButtonStyle.secondary, emoji="🔴")
+    async def toggle_recording_button(self, button, interaction):
+        if not self.is_recording:  # If not recording, start recording
+            self.is_recording = True
+            button.label = "Stop Recording"
+            button.style = discord.ButtonStyle.primary
+            button.emoji = "⬛"
+            await interaction.response.edit_message(view=self)  # Update the button
 
-        # Acknowledge the interaction
-        await interaction.response.defer()
-        await record(self.ctx)
+            await record(self.ctx)
 
-    @discord.ui.button(label="Stop Recording", style=discord.ButtonStyle.secondary, emoji="⬛")
-    async def button_callback_2(self, button, interaction):
-        await interaction.response.defer()
-        await stop_recording(self.ctx)
+        else:  # If recording, stop recording
+            self.is_recording = False
+            button.label = "Start Recording"
+            button.style = discord.ButtonStyle.secondary
+            button.emoji = "🔴"
+            await interaction.response.edit_message(view=self)  # Update the button
 
-    @discord.ui.button(label="Wipe Memory", style=discord.ButtonStyle.secondary, emoji="🧠")
+            await stop_recording(self.ctx)
+
+    @discord.ui.button(label="Wipe Memory", style=discord.ButtonStyle.red, emoji="🧠")
     async def button_callback_3(self, button, interaction):
         await interaction.response.defer()
         await wipe_memory(self.ctx)
