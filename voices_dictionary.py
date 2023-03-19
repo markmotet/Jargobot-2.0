@@ -7,7 +7,7 @@ voices_dictionary = {
     'Walter White': ['oxNdgzem3MAXNc9FUpwC', "Respond as though you are Walter White from Breaking Bad."],
     'Dwarf': ['gEXr2zpEzBCKIwPKjK35', "Respond as though you are a dwarf from J.R.R. Tolkien's Middle-earth."],
     'Orthon': ['R2EfefHg0MtFDsMfRgVm', "Respond as though you are Orthon, a brutal captain leader."],
-    'McCree': ['NdRBk8qpmMQFimYecQjM', "Respond as though you are McCree from Overwatch. Respond with a max of one sentence."],
+    'McCree': ['NdRBk8qpmMQFimYecQjM', "Respond as though you are McCree from Overwatch."],
     'Geralt': ['po3fRWfnFpzD1BRnszkd', "Respond as though you are Geralt from The Witcher 3."],
     'Kruber': ['5zC14vOo0BTduHsq9VbA', "Respond as though you are the gang leader of a group of scoundrels from Blades in the Dark. You have some details of a score that you are about to share with us."],
     'Crazy Wizard': ['KitpDJsymECbK7Uswq9R', "Respond as though you are a crazy wizard."],
