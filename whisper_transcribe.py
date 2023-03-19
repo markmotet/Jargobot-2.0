@@ -4,8 +4,8 @@ from halo import Halo
 load_model_spinner = Halo(text='Loading model', spinner='line')
 
 with load_model_spinner:
-    model = whisper.load_model("base")
-    # model = whisper.load_model("large-v2")
+    # model = whisper.load_model("base")
+    model = whisper.load_model("large-v2")
 
 load_model_spinner.succeed('Model loaded successfully!')
 
