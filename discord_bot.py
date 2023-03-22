@@ -8,17 +8,16 @@ import os
 import openai
 
 from whisper_transcribe import transcribe_with_whisper
-from eleven_labs import send_to_eleven_labs, UnauthorizedError
+from eleven_labs import text_to_speech, UnauthorizedError, add_voice as add_elevenlabs_voice, delete_voice as delete_elevenlabs_voice, get_voices as get_elevenlabs_voices, get_voice_metadata as get_elevenlabs_voice_metadata
 from chatgpt import send_to_chatgpt
 from play_audio import play_audio
 from sqlite_database import setup_database, store_elevenlabs_api_key, get_elevenlabs_api_key, store_openai_api_key, get_openai_api_key, view_database_entries
 from voices_dictionary import voices_dictionary
 
 intents = discord.Intents.all()
-intents.members = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-active_voice_id = voices_dictionary['Dumbledore'][0]
+active_voice_id = ""
 
 async def play(ctx):
     channel = ctx.author.voice.channel
@@ -59,7 +58,7 @@ async def once_done(sink: discord.sinks, channel: discord.TextChannel, *args):  
         print('\nSending to ElevenLabs...\n')
         await update_embed(ctx, '💬 Sending to ElevenLabs...', response=chat_gpt_response)
 
-        send_to_eleven_labs(chat_gpt_response, active_voice_id, get_elevenlabs_api_key(conn, ctx.guild.id))
+        text_to_speech(chat_gpt_response, active_voice_id, get_elevenlabs_api_key(conn, ctx.guild.id))
         message_list.append({"role": "assistant", "content": chat_gpt_response})
         for message in message_list:
             print(message['role'] + ': ' + message['content'])
@@ -123,6 +122,20 @@ async def setup(ctx):
         await ctx.author.send("OpenAI API key request timed out. Please try the setup command again.")
 
 
+@bot.command()
+async def join(ctx):
+    channel = ctx.message.author.voice.channel
+    if not channel:
+        await ctx.send("You're not connected to any voice channel !")
+    else:
+        voice = get(bot.voice_clients, guild=ctx.guild)
+        if voice and voice.is_connected():
+            await voice.move_to(channel)
+        else:
+            print(f"Connecting to {channel}...")
+            voice = await channel.connect()
+            print(f"The bot has connected to {channel}\n")
+
 connections = {}
 @bot.command()
 async def record(ctx):  # If you're using commands.Bot, this will also work.
@@ -155,34 +168,84 @@ async def stop_recording(ctx):
 
     vc.stop_recording()
 
+def get_voices(ctx):
+    elevenlabs_api_key = get_elevenlabs_api_key(conn, ctx.guild.id)
+    response = get_elevenlabs_voices(elevenlabs_api_key)
+
+    if response is None:
+        print("Failed to get voices. Please check your API key.")
+        return
+
+    # voice_list = "\n".join([f"{voice['name']} ({voice['voice_id']})" for voice in response['voices']])
+    # await ctx.send(f"Available voices:\n{voice_list}")
+    
+    # Return a dictionary of voice names and IDs
+    voices_dictionary = {voice['name']: voice['voice_id'] for voice in response['voices']}
+    print(voices_dictionary)
+    return voices_dictionary
+
+
+class VoiceSelect(discord.ui.Select):
+    def __init__(self, ctx, all_options):
+        super().__init__(placeholder="Select an option", min_values=1, max_values=1, options=all_options)
+        self.ctx = ctx
+
+    async def callback(self, interaction: discord.Interaction):
+        selected_voice_id = self.values[0]
+        # Do something with the selected_voice_id, e.g., change the bot's voice or send a message
+        
+        #defer the interaction
+        await interaction.response.defer()
+        
+        print(f'Selected voice: {selected_voice_id}')
+
+        global active_voice_id
+        active_voice_id = selected_voice_id
+
+        # print active_voice_id
+        print(active_voice_id)
+
+        await wipe_memory(self.ctx)
+
 class MyView(discord.ui.View):
+    
+
     def __init__(self, ctx):
         super().__init__()
         self.ctx = ctx
         self.is_recording = False  # Add an attribute to track the button's state
 
-    all_options = []
+        self.all_options = []
+        
+        for name, id in get_voices(self.ctx).items():
+            option = discord.SelectOption(
+                label=name,
+                value=id
+                # description=info[1] if len(info) > 1 else None,  # use the description from the dictionary if it exists
+            )
+            self.all_options.append(option)
 
-    for name, info in voices_dictionary.items():
-        option = discord.SelectOption(
-            label=name,
-            # description=info[1] if len(info) > 1 else None,  # use the description from the dictionary if it exists
-        )
-        all_options.append(option)
+            # Only add max 25 options
+            if len(self.all_options) == 25:
+                break
 
-    @discord.ui.select(  # the decorator that lets you specify the properties of the select menu
-            placeholder="Select AI Character...",  # the placeholder text that will be displayed if nothing is selected
-            min_values=1,  # the minimum number of values that must be selected by the users
-            max_values=1,  # the maximum number of values that can be selected by the users
-            options=all_options
-    )
-    async def select_callback(self, select, interaction):  # the function called when the user is done selecting options
-        await interaction.response.defer()
-        global active_voice_id
-        global role_message
-        active_voice_id = voices_dictionary[select.values[0]][0]
-        role_message = voices_dictionary[select.values[0]][1]
-        await wipe_memory(self.ctx)
+        voice_dropdown = VoiceSelect(self.ctx, self.all_options)
+
+        self.add_item(voice_dropdown)
+
+    # @discord.ui.select(  # the decorator that lets you specify the properties of the select menu
+    #         placeholder="Select AI Character...",  # the placeholder text that will be displayed if nothing is selected
+    #         min_values=1,  # the minimum number of values that must be selected by the users
+    #         max_values=1,  # the maximum number of values that can be selected by the users
+    #         options=self.all_options  # Use the all_options list created inside the __init__ method
+    # )
+    # async def select_callback(self, select, interaction):  # the function called when the user is done selecting options
+    #     await interaction.response.defer()
+    #     global active_voice_id
+    #     global role_message
+    #     active_voice_id = voices_dictionary[select.values[0]][0]
+    #     role_message = voices_dictionary[select.values[0]][1]
+    #     await wipe_memory(self.ctx)
 
     @discord.ui.button(label="Start Recording", style=discord.ButtonStyle.secondary, emoji="🔴")
     async def toggle_recording_button(self, button, interaction):
@@ -289,6 +352,38 @@ async def send_apikey(ctx):
     await ctx.send(openai_api_key)
 
     view_database_entries(conn)
+
+@bot.command()
+async def add_voice(ctx, name, file_url, labels=None):
+    """Add a new voice to Eleven Labs Text-to-Speech API"""
+    await ctx.trigger_typing()
+    # Send message to channel
+    await ctx.send(f"Adding voice {name}...")
+
+    # Call the add_voice function from eleven_labs.py file
+    elevenlabs_api_key = get_elevenlabs_api_key(conn, ctx.guild.id)
+    response = add_elevenlabs_voice(elevenlabs_api_key, name, file_url, labels)
+    
+    # Send the response back to the user
+    if response is not None:
+        await ctx.send(response)
+    else:
+        await ctx.send("Failed to add voice. Please check your API key and parameters.")
+
+@bot.command()
+async def delete_voice(ctx, voice_id):
+    """Delete a voice from Eleven Labs Text-to-Speech API"""
+    await ctx.trigger_typing()
+
+    # Call the delete_voice function from eleven_labs.py file
+    elevenlabs_api_key = get_elevenlabs_api_key(conn, ctx.guild.id)
+    response = delete_elevenlabs_voice(voice_id, elevenlabs_api_key)
+    
+    # Send the response back to the user
+    if response is not None:
+        await ctx.send(response)
+    else:
+        await ctx.send("Failed to delete voice. Please check your API key and voice ID.")
 
 conn = setup_database()
 bot.run(os.environ['DISCORD_BOT_TOKEN'])
