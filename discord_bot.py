@@ -202,7 +202,11 @@ class VoiceSelect(discord.ui.Select):
         active_voice_id = selected_voice_id
 
         global role_message
-        role_message = get_role_message(conn, selected_voice_id)
+
+         # set role message if get_role_message returns a message
+        the_role_message = get_role_message(conn, selected_voice_id)
+        if the_role_message is not None:
+            role_message = the_role_message
 
         # print active_voice_id
         print(active_voice_id)
