@@ -13,6 +13,7 @@ from chatgpt import send_to_chatgpt
 from play_audio import play_audio
 from sqlite_database import setup_database, store_elevenlabs_api_key, get_elevenlabs_api_key, store_openai_api_key, get_openai_api_key, view_database_entries, get_role_message, store_voice_role, voice_id_exists
 from voices_dictionary import voices_dictionary
+from modals import *
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='!', intents=intents)
@@ -362,6 +363,15 @@ async def add_voice(ctx, name, file_url, role_message, labels=None):
         await ctx.send(response)
     else:
         await ctx.send("Failed to add voice. Please check your API key and parameters.")
+
+
+@bot.slash_command()
+async def add_voice(ctx: discord.ApplicationContext):
+    """Shows an example of a modal dialog being invoked from a slash command."""
+    modal = AddVoiceModal(ctx, conn)
+    await ctx.send_modal(modal)
+
+
 
 @bot.command()
 async def delete_voice(ctx, voice_id):
