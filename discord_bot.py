@@ -11,7 +11,7 @@ from whisper_transcribe import transcribe_with_whisper
 from eleven_labs import text_to_speech, UnauthorizedError, add_voice as add_elevenlabs_voice, delete_voice as delete_elevenlabs_voice, get_voices as get_elevenlabs_voices, get_voice_metadata as get_elevenlabs_voice_metadata
 from chatgpt import send_to_chatgpt
 from play_audio import play_audio
-from sqlite_database import setup_database, store_elevenlabs_api_key, get_elevenlabs_api_key, store_openai_api_key, get_openai_api_key, view_database_entries
+from sqlite_database import setup_database, store_elevenlabs_api_key, get_elevenlabs_api_key, store_openai_api_key, get_openai_api_key, view_database_entries, get_role_message, store_voice_role
 from voices_dictionary import voices_dictionary
 
 intents = discord.Intents.all()
@@ -121,7 +121,6 @@ async def setup(ctx):
     except asyncio.TimeoutError:
         await ctx.author.send("OpenAI API key request timed out. Please try the setup command again.")
 
-
 @bot.command()
 async def join(ctx):
     channel = ctx.message.author.voice.channel
@@ -202,6 +201,9 @@ class VoiceSelect(discord.ui.Select):
         global active_voice_id
         active_voice_id = selected_voice_id
 
+        global role_message
+        role_message = get_role_message(conn, selected_voice_id)
+
         # print active_voice_id
         print(active_voice_id)
 
@@ -209,7 +211,6 @@ class VoiceSelect(discord.ui.Select):
 
 class MyView(discord.ui.View):
     
-
     def __init__(self, ctx):
         super().__init__()
         self.ctx = ctx
@@ -232,20 +233,6 @@ class MyView(discord.ui.View):
         voice_dropdown = VoiceSelect(self.ctx, self.all_options)
 
         self.add_item(voice_dropdown)
-
-    # @discord.ui.select(  # the decorator that lets you specify the properties of the select menu
-    #         placeholder="Select AI Character...",  # the placeholder text that will be displayed if nothing is selected
-    #         min_values=1,  # the minimum number of values that must be selected by the users
-    #         max_values=1,  # the maximum number of values that can be selected by the users
-    #         options=self.all_options  # Use the all_options list created inside the __init__ method
-    # )
-    # async def select_callback(self, select, interaction):  # the function called when the user is done selecting options
-    #     await interaction.response.defer()
-    #     global active_voice_id
-    #     global role_message
-    #     active_voice_id = voices_dictionary[select.values[0]][0]
-    #     role_message = voices_dictionary[select.values[0]][1]
-    #     await wipe_memory(self.ctx)
 
     @discord.ui.button(label="Start Recording", style=discord.ButtonStyle.secondary, emoji="🔴")
     async def toggle_recording_button(self, button, interaction):
@@ -354,7 +341,7 @@ async def send_apikey(ctx):
     view_database_entries(conn)
 
 @bot.command()
-async def add_voice(ctx, name, file_url, labels=None):
+async def add_voice(ctx, name, file_url, role_message, labels=None):
     """Add a new voice to Eleven Labs Text-to-Speech API"""
     await ctx.trigger_typing()
     # Send message to channel
@@ -366,6 +353,8 @@ async def add_voice(ctx, name, file_url, labels=None):
     
     # Send the response back to the user
     if response is not None:
+        voice_id = response.get('voice_id')
+        store_voice_role(conn, voice_id, ctx.guild.id, role_message)
         await ctx.send(response)
     else:
         await ctx.send("Failed to add voice. Please check your API key and parameters.")

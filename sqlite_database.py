@@ -7,6 +7,11 @@ def setup_database():
                  (guild_id INTEGER PRIMARY KEY,
                   elevenlabs_api_key TEXT,
                   openai_api_key TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS voices
+                (voice_id TEXT PRIMARY KEY,
+                guild_id INTEGER,
+                role_message TEXT,
+                FOREIGN KEY (guild_id) REFERENCES api_keys (guild_id))''')
     conn.commit()
     return conn
 
@@ -39,3 +44,15 @@ def view_database_entries(conn):
         rows = conn.execute("SELECT * FROM api_keys").fetchall()
         for row in rows:
             print(row)
+
+def get_role_message(conn, voice_id):
+    with conn:
+        role_message = conn.execute("SELECT role_message FROM voices WHERE voice_id=?", (voice_id,)).fetchone()
+        if role_message:
+            return role_message[0]
+        else:
+            return None
+
+def store_voice_role(conn, voice_id, guild_id, role_message):
+    with conn:
+        conn.execute("INSERT OR REPLACE INTO voices (voice_id, guild_id, role_message) VALUES (?, ?, ?)", (voice_id, guild_id, role_message))
