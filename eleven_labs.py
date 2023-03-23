@@ -150,7 +150,7 @@ def delete_voice(voice_id, api_key):
 #     print(result)
 # --------------------------------------------
 
-def edit_voice(voice_id, api_key, name=None, file_urls=None, labels=None):
+def edit_voice(api_key, voice_id, name=None, file_urls=None, labels=None):
     headers = {
         'xi-api-key': api_key
     }
