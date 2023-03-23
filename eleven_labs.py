@@ -149,3 +149,30 @@ def delete_voice(voice_id, api_key):
 # if result:
 #     print(result)
 # --------------------------------------------
+
+def edit_voice(voice_id, api_key, name=None, file_urls=None, labels=None):
+    headers = {
+        'xi-api-key': api_key
+    }
+
+    data = {}
+    if name:
+        data['name'] = name
+    if labels:
+        data['labels'] = labels
+
+    files_data = []
+    if file_urls:
+        for file_url in file_urls:
+            response = requests.get(file_url, stream=True)
+            files_data.append(('files', (file_url.split('/')[-1], response.raw)))
+
+    response = requests.post(f'https://api.elevenlabs.io/v1/voices/{voice_id}/edit', headers=headers, data=data, files=files_data)
+
+    if response.status_code == 200:
+        return response.json()
+    elif response.status_code == 401:
+        raise UnauthorizedError("Unauthorized access. Please check your API key.")
+    else:
+        print('Request failed with status code', response.status_code)
+        return None
