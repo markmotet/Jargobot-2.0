@@ -56,3 +56,11 @@ def get_role_message(conn, voice_id):
 def store_voice_role(conn, voice_id, guild_id, role_message):
     with conn:
         conn.execute("INSERT OR REPLACE INTO voices (voice_id, guild_id, role_message) VALUES (?, ?, ?)", (voice_id, guild_id, role_message))
+
+def voice_id_exists(conn, voice_id, guild_id):
+    with conn:
+        voice_id = conn.execute("SELECT voice_id FROM voices WHERE voice_id=? AND guild_id=?", (voice_id, guild_id)).fetchone()
+        if voice_id:
+            return True
+        else:
+            return False
