@@ -11,7 +11,7 @@ from whisper_transcribe import transcribe_with_whisper
 from eleven_labs import text_to_speech, UnauthorizedError, add_voice as add_elevenlabs_voice, delete_voice as delete_elevenlabs_voice, edit_voice as edit_elevenlabs_voice, get_voices as get_elevenlabs_voices, get_voice_metadata as get_elevenlabs_voice_metadata
 from chatgpt import send_to_chatgpt
 from play_audio import play_audio
-from sqlite_database import setup_database, store_elevenlabs_api_key, get_elevenlabs_api_key, store_openai_api_key, get_openai_api_key, view_database_entries, get_role_message, store_voice_role
+from sqlite_database import setup_database, store_elevenlabs_api_key, get_elevenlabs_api_key, store_openai_api_key, get_openai_api_key, view_database_entries, get_role_message, store_voice_role, voice_id_exists
 from voices_dictionary import voices_dictionary
 
 intents = discord.Intents.all()
@@ -375,16 +375,26 @@ async def delete_voice(ctx, voice_id):
         await ctx.send("Failed to delete voice. Please check your API key and voice ID.")
 
 @bot.command()
-async def edit_voice(ctx, voice_id, name, role_message, file_url=None, labels=None):
+async def edit_voice(ctx, voice_id, new_name, new_role_message, file_url=None, labels=None):
     """Edit a voice from Eleven Labs Text-to-Speech API"""
+    
     await ctx.trigger_typing()
+
+    # Check if the voice ID exists in the database
+
+    if not voice_id_exists(conn, voice_id, ctx.guild.id):
+        print(f"Voice ID {voice_id} does not exist in the database.")
+        await ctx.send(f"Voice ID `{voice_id}` does not exist in the database.")
+        return
+
+    print(f"Editing voice {voice_id}...")
 
     # Call the edit_voice function from eleven_labs.py file
     elevenlabs_api_key = get_elevenlabs_api_key(conn, ctx.guild.id)
-    response = edit_elevenlabs_voice(elevenlabs_api_key, voice_id, name, file_url, labels)
+    response = edit_elevenlabs_voice(elevenlabs_api_key, voice_id, new_name, file_url, labels)
 
     # Update the database with the new role message
-    store_voice_role(conn, voice_id, ctx.guild.id, role_message)
+    store_voice_role(conn, voice_id, ctx.guild.id, new_role_message)
     
     # Send the response back to the user
     if response is not None:
@@ -392,7 +402,6 @@ async def edit_voice(ctx, voice_id, name, role_message, file_url=None, labels=No
     else:
         await ctx.send("Failed to edit voice. Please check your API key and parameters.")
     
-
 @edit_voice.error
 async def edit_voice_error(ctx, error):
     if isinstance(error, discord.ext.commands.errors.MissingRequiredArgument):
@@ -402,6 +411,8 @@ async def edit_voice_error(ctx, error):
         embed = discord.Embed(title="⚠️", description=f"Oops! It looks like you've forgotten to include `<{missing_param}>` in your edit_voice command.")
         embed.add_field(name="Usage", value="**!edit_voice** `<voice_id>` `<new_name>` `<new_role_message>` `<file_url>`", inline=False)
         return await ctx.send(embed=embed)
+
+
 
 
 
