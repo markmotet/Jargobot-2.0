@@ -352,32 +352,41 @@ async def delete_voice(interaction: discord.Interaction, voice_id):
         await interaction.respond("Failed to delete voice. Please check your API key and voice ID.")
 
 @bot.slash_command()
-async def edit_voice(interaction: discord.Interaction, voice_id, new_name, new_role_message, file_url=None, labels=None):
-    """Edit a voice from Eleven Labs Text-to-Speech API"""
+async def edit_voice(interaction: discord.Interaction):
+    """Shows an example of a modal dialog being invoked from a slash command."""
+    modal = EditVoiceModal(interaction, conn)
+    await interaction.send_modal(modal)
+
+
+# @bot.slash_command()
+# async def edit_voice(interaction: discord.Interaction, voice_id, new_name, new_role_message, file_url=None, labels=None):
+#     """Edit a voice from Eleven Labs Text-to-Speech API"""
     
-    await interaction.trigger_typing()
+#     await interaction.trigger_typing()
 
-    # Check if the voice ID exists in the database
+#     # Check if the voice ID exists in the database
 
-    if not voice_id_exists(conn, voice_id, interaction.guild.id):
-        print(f"Voice ID {voice_id} does not exist in the database.")
-        await interaction.respond(f"Voice ID `{voice_id}` does not exist in the database.")
-        return
+#     if not voice_id_exists(conn, voice_id, interaction.guild.id):
+#         print(f"Voice ID {voice_id} does not exist in the database.")
+#         await interaction.respond(f"Voice ID `{voice_id}` does not exist in the database.")
+#         return
 
-    print(f"Editing voice {voice_id}...")
+#     print(f"Editing voice {voice_id}...")
 
-    # Call the edit_voice function from eleven_labs.py file
-    elevenlabs_api_key = get_elevenlabs_api_key(conn, interaction.guild.id)
-    response = edit_elevenlabs_voice(elevenlabs_api_key, voice_id, new_name, file_url, labels)
+#     # Call the edit_voice function from eleven_labs.py file
+#     elevenlabs_api_key = get_elevenlabs_api_key(conn, interaction.guild.id)
+#     response = edit_elevenlabs_voice(elevenlabs_api_key, voice_id, new_name, file_url, labels)
 
-    # Update the database with the new role message
-    store_voice_role(conn, voice_id, interaction.guild.id, new_role_message)
+#     # Update the database with the new role message
+#     store_voice_role(conn, voice_id, interaction.guild.id, new_role_message)
     
-    # Send the response back to the user
-    if response is not None:
-        await interaction.respond(f"Voice `{voice_id}` edited successfully.")
-    else:
-        await interaction.respond("Failed to edit voice. Please check your API key and parameters.")
+#     # Send the response back to the user
+#     if response is not None:
+#         await interaction.respond(f"Voice `{voice_id}` edited successfully.")
+#     else:
+#         await interaction.respond("Failed to edit voice. Please check your API key and parameters.")
+
+   
     
 # @edit_voice.error
 # async def edit_voice_error(ctx, error):
