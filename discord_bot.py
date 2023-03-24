@@ -20,13 +20,17 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 
 active_voice_id = ""
 
+@bot.slash_command()
 async def play(ctx):
+    print('Playing audio...')
     channel = ctx.author.voice.channel
     voice_client = get(bot.voice_clients, guild=ctx.guild)
     if not voice_client:
+        print('Connecting to voice channel...')
         voice_client = await channel.connect()
     audio_source = FFmpegPCMAudio('./audio.mp3')
     if not voice_client.is_playing():
+        print('Playing audio...')
         voice_client.play(audio_source, after=None)
 
     while voice_client.is_playing():
@@ -82,10 +86,19 @@ async def send_instructions_embed(ctx, service_name, instructions, image_url):
     await ctx.author.send(embed=embed)
 
 
-@bot.command()
+@bot.slash_command()
 async def setup(ctx):
+   
     def check(message):
         return message.author == ctx.author and isinstance(message.channel, discord.DMChannel)
+    
+    # Send embed telling user to check their DMs
+    embed = discord.Embed(
+        title="Setup",
+        description="Please check your DMs for instructions on how to set up your API keys.",
+        color=discord.Color.blue()
+    )
+    await ctx.respond(embed=embed)
     
     # Ask for ElevenLabs API key
     elevenlabs_instructions = (
@@ -122,22 +135,8 @@ async def setup(ctx):
     except asyncio.TimeoutError:
         await ctx.author.send("OpenAI API key request timed out. Please try the setup command again.")
 
-@bot.command()
-async def join(ctx):
-    channel = ctx.message.author.voice.channel
-    if not channel:
-        await ctx.send("You're not connected to any voice channel !")
-    else:
-        voice = get(bot.voice_clients, guild=ctx.guild)
-        if voice and voice.is_connected():
-            await voice.move_to(channel)
-        else:
-            print(f"Connecting to {channel}...")
-            voice = await channel.connect()
-            print(f"The bot has connected to {channel}\n")
 
 connections = {}
-@bot.command()
 async def record(ctx):  # If you're using commands.Bot, this will also work.
     
     await update_embed(ctx, '🔴 Recording...', transcription='-----',response='-----')
@@ -145,7 +144,7 @@ async def record(ctx):  # If you're using commands.Bot, this will also work.
     voice = ctx.author.voice
 
     if not voice:
-        await ctx.send("You aren't in a voice channel!")
+        await ctx.respond("You aren't in a voice channel!")
 
     # # Check if the bot is already in a voice channel.
     # if ctx.guild.id not in connections:
@@ -160,11 +159,10 @@ async def record(ctx):  # If you're using commands.Bot, this will also work.
         ctx,
     )
 
-@bot.command()
 async def stop_recording(ctx):
     vc = connections.get(ctx.guild.id)
     if not vc:
-        await ctx.send("I'm not in the voice chat!")
+        await ctx.respond("I'm not in the voice chat!")
 
     vc.stop_recording()
 
@@ -177,7 +175,7 @@ def get_voices(ctx):
         return
 
     # voice_list = "\n".join([f"{voice['name']} ({voice['voice_id']})" for voice in response['voices']])
-    # await ctx.send(f"Available voices:\n{voice_list}")
+    # await ctx.respond(f"Available voices:\n{voice_list}")
     
     # Return a dictionary of voice names and IDs
     voices_dictionary = {voice['name']: voice['voice_id'] for voice in response['voices']}
@@ -267,35 +265,35 @@ class MyView(discord.ui.View):
 
 message_id = 0
 
-@bot.command()
-async def start(ctx):
+
+@bot.slash_command()
+async def start(interaction: discord.Interaction):
 
     # Check if the API keys are set up
-    elevenlabs_api_key = get_elevenlabs_api_key(conn, ctx.guild.id)
-    openai_api_key = get_openai_api_key(conn, ctx.guild.id)
+    elevenlabs_api_key = get_elevenlabs_api_key(conn, interaction.guild.id)
+    openai_api_key = get_openai_api_key(conn, interaction.guild.id)
 
     if not elevenlabs_api_key or not openai_api_key:
-        await ctx.send("API keys are not set up properly. Please use the `!setup` command to configure them.")
+        await interaction.respond("API keys are not set up properly. Please use the `!setup` command to configure them.")
         return
 
     # Start only if the user is in a voice channel
-    if ctx.author.voice:
+    if interaction.user.voice:
 
-        await ctx.send(view=MyView(ctx))
+        await interaction.respond(view=MyView(interaction))
 
         # Send embed with status text
         embed = discord.Embed()
 
         embed.add_field(name="Transcription", value="-----", inline=False)
         embed.add_field(name="Response", value="-----", inline=False)
-        message = await ctx.send(embed=embed)
+        message = await interaction.respond(embed=embed)
 
         global message_id
         message_id = message.id
     else:
-        await ctx.send("You are not connected to a voice channel.")
+        await interaction.respond("You are not connected to a voice channel.")
 
-@bot.command()
 async def update_embed(ctx, status=None, transcription=None, response=None):
     # Get the original message with the embed
     message = await ctx.channel.fetch_message(message_id)
@@ -321,7 +319,6 @@ async def update_embed(ctx, status=None, transcription=None, response=None):
     await message.edit(embed=embed)
 
 
-@bot.command()
 async def wipe_memory(ctx):
     global message_list
     global role_message
@@ -330,101 +327,67 @@ async def wipe_memory(ctx):
         ]
     await update_embed(ctx, transcription='-----', response='-----')
 
-# Send elevenlabs apikey to general channel
-@bot.command()
-async def send_apikey(ctx):
 
-    #send elevenlabs apikey to general channel
-    global elevenlabs_api_key
-    elevenlabs_api_key = get_elevenlabs_api_key(conn, ctx.guild.id)
-    await ctx.send(elevenlabs_api_key)
-    #send openai apikey to general channel
-    global openai_api_key
-    openai_api_key = get_openai_api_key(conn, ctx.guild.id)
-    await ctx.send(openai_api_key)
+@bot.slash_command()
+async def add_voice(interaction: discord.Interaction):
+    """Shows an example of a modal dialog being invoked from a slash command."""
+    modal = AddVoiceModal(interaction, conn)
+    await interaction.send_modal(modal)
 
-    view_database_entries(conn)
-
-@bot.command()
-async def add_voice(ctx, name, file_url, role_message, labels=None):
-    """Add a new voice to Eleven Labs Text-to-Speech API"""
-    await ctx.trigger_typing()
-    # Send message to channel
-    await ctx.send(f"Adding voice {name}...")
-
-    # Call the add_voice function from eleven_labs.py file
-    elevenlabs_api_key = get_elevenlabs_api_key(conn, ctx.guild.id)
-    response = add_elevenlabs_voice(elevenlabs_api_key, name, file_url, labels)
-    
-    # Send the response back to the user
-    if response is not None:
-        voice_id = response.get('voice_id')
-        store_voice_role(conn, voice_id, ctx.guild.id, role_message)
-        await ctx.send(response)
-    else:
-        await ctx.send("Failed to add voice. Please check your API key and parameters.")
 
 
 @bot.slash_command()
-async def add_voice(ctx: discord.ApplicationContext):
-    """Shows an example of a modal dialog being invoked from a slash command."""
-    modal = AddVoiceModal(ctx, conn)
-    await ctx.send_modal(modal)
-
-
-
-@bot.command()
-async def delete_voice(ctx, voice_id):
+async def delete_voice(interaction: discord.Interaction, voice_id):
     """Delete a voice from Eleven Labs Text-to-Speech API"""
-    await ctx.trigger_typing()
+    await interaction.trigger_typing()
 
     # Call the delete_voice function from eleven_labs.py file
-    elevenlabs_api_key = get_elevenlabs_api_key(conn, ctx.guild.id)
+    elevenlabs_api_key = get_elevenlabs_api_key(conn, interaction.guild.id)
     response = delete_elevenlabs_voice(voice_id, elevenlabs_api_key)
     
     # Send the response back to the user
     if response is not None:
-        await ctx.send(response)
+        await interaction.respond(f"Voice `{voice_id}` deleted successfully.")
     else:
-        await ctx.send("Failed to delete voice. Please check your API key and voice ID.")
+        await interaction.respond("Failed to delete voice. Please check your API key and voice ID.")
 
-@bot.command()
-async def edit_voice(ctx, voice_id, new_name, new_role_message, file_url=None, labels=None):
+@bot.slash_command()
+async def edit_voice(interaction: discord.Interaction, voice_id, new_name, new_role_message, file_url=None, labels=None):
     """Edit a voice from Eleven Labs Text-to-Speech API"""
     
-    await ctx.trigger_typing()
+    await interaction.trigger_typing()
 
     # Check if the voice ID exists in the database
 
-    if not voice_id_exists(conn, voice_id, ctx.guild.id):
+    if not voice_id_exists(conn, voice_id, interaction.guild.id):
         print(f"Voice ID {voice_id} does not exist in the database.")
-        await ctx.send(f"Voice ID `{voice_id}` does not exist in the database.")
+        await interaction.respond(f"Voice ID `{voice_id}` does not exist in the database.")
         return
 
     print(f"Editing voice {voice_id}...")
 
     # Call the edit_voice function from eleven_labs.py file
-    elevenlabs_api_key = get_elevenlabs_api_key(conn, ctx.guild.id)
+    elevenlabs_api_key = get_elevenlabs_api_key(conn, interaction.guild.id)
     response = edit_elevenlabs_voice(elevenlabs_api_key, voice_id, new_name, file_url, labels)
 
     # Update the database with the new role message
-    store_voice_role(conn, voice_id, ctx.guild.id, new_role_message)
+    store_voice_role(conn, voice_id, interaction.guild.id, new_role_message)
     
     # Send the response back to the user
     if response is not None:
-        await ctx.send(response)
+        await interaction.respond(f"Voice `{voice_id}` edited successfully.")
     else:
-        await ctx.send("Failed to edit voice. Please check your API key and parameters.")
+        await interaction.respond("Failed to edit voice. Please check your API key and parameters.")
     
-@edit_voice.error
-async def edit_voice_error(ctx, error):
-    if isinstance(error, discord.ext.commands.errors.MissingRequiredArgument):
+# @edit_voice.error
+# async def edit_voice_error(ctx, error):
+#     if isinstance(error, discord.ext.commands.errors.MissingRequiredArgument):
 
-        missing_param = error.param.name
+#         missing_param = error.param.name
 
-        embed = discord.Embed(title="⚠️", description=f"Oops! It looks like you've forgotten to include `<{missing_param}>` in your edit_voice command.")
-        embed.add_field(name="Usage", value="**!edit_voice** `<voice_id>` `<new_name>` `<new_role_message>` `<file_url>`", inline=False)
-        return await ctx.send(embed=embed)
+#         embed = discord.Embed(title="⚠️", description=f"Oops! It looks like you've forgotten to include `<{missing_param}>` in your edit_voice command.")
+#         embed.add_field(name="Usage", value="**!edit_voice** `<voice_id>` `<new_name>` `<new_role_message>` `<file_url>`", inline=False)
+#         return await ctx.send(embed=embed)
 
 
 

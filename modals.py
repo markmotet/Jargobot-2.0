@@ -5,9 +5,9 @@ from eleven_labs import add_voice as add_elevenlabs_voice
 from sqlite_database import get_elevenlabs_api_key, store_voice_role
 
 class AddVoiceModal(discord.ui.Modal):
-    def __init__(self, ctx, conn):
+    def __init__(self, interaction, conn):
         super().__init__(title="Add Voice")
-        self.ctx = ctx
+        self.interaction = interaction
         self.conn = conn
 
         self.add_item(discord.ui.InputText(label="Voice Name"))
@@ -47,11 +47,9 @@ class AddVoiceModal(discord.ui.Modal):
             embed.set_footer(text="✅ Voice added to ElevenLabs")
             voice_id = response.get('voice_id')
             store_voice_role(self.conn, voice_id, interaction.guild.id, role_message)
-            # await self.ctx.send(response)
         else:
             # Update the footer based on the failed response
             embed.set_footer(text="❌ Failed to add voice to ElevenLabs")
-            await self.ctx.send("Failed to add voice. Please check your API key and parameters.")
 
         # Edit the message to replace it with the updated embed
         await sent_message.edit(embed=embed)
