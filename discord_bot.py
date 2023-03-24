@@ -61,7 +61,7 @@ async def once_done(sink: discord.sinks, channel: discord.TextChannel, *args):  
         chat_gpt_response = send_to_chatgpt(get_openai_api_key(conn, ctx.guild.id), message_list)
 
         print('\nSending to ElevenLabs...\n')
-        await update_embed(ctx, '💬 Sending to ElevenLabs...', response=chat_gpt_response)
+        await update_embed(ctx, '💬 Sending to ElevenLabs...', response=f"||{chat_gpt_response}||")
 
         text_to_speech(chat_gpt_response, active_voice_id, get_elevenlabs_api_key(conn, ctx.guild.id))
         message_list.append({"role": "assistant", "content": chat_gpt_response})
