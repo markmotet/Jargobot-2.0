@@ -1,7 +1,7 @@
 import discord
 
 from eleven_labs import add_voice as add_elevenlabs_voice, edit_voice as edit_elevenlabs_voice
-from sqlite_database import get_elevenlabs_api_key, store_voice_role
+from sqlite_database import get_elevenlabs_api_key, set_role_message
 
 class AddVoiceModal(discord.ui.Modal):
     def __init__(self, interaction, conn):
@@ -39,13 +39,16 @@ class AddVoiceModal(discord.ui.Modal):
         elevenlabs_api_key = get_elevenlabs_api_key(self.conn, interaction.guild.id)
         response = add_elevenlabs_voice(elevenlabs_api_key, name, file_url)
 
+        # Save role message to database
+        set_role_message(self.conn, interaction.guild.id, role_message)
+
 
         # Send the response back to the user
         if response is not None:
             # Update the footer based on the response
             embed.set_footer(text="✅ Voice added to ElevenLabs")
             voice_id = response.get('voice_id')
-            store_voice_role(self.conn, voice_id, interaction.guild.id, role_message)
+            set_role_message(self.conn, voice_id, interaction.guild.id, role_message)
         else:
             # Update the footer based on the failed response
             embed.set_footer(text="❌ Failed to add voice to ElevenLabs")
@@ -87,7 +90,7 @@ class EditVoiceModal(discord.ui.Modal):
         response = edit_elevenlabs_voice(elevenlabs_api_key, voice_id, new_name)
 
         # Update the database with the new role message
-        store_voice_role(self.conn, voice_id, interaction.guild.id, new_role_message)
+        set_role_message(self.conn, voice_id, interaction.guild.id, new_role_message)
 
         # Send the response back to the user
         if response is not None:

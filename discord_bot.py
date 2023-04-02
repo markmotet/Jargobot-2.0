@@ -11,14 +11,12 @@ from whisper_transcribe import transcribe_with_whisper
 from eleven_labs import text_to_speech, UnauthorizedError, add_voice as add_elevenlabs_voice, delete_voice as delete_elevenlabs_voice, edit_voice as edit_elevenlabs_voice, get_voices as get_elevenlabs_voices, get_voice_metadata as get_elevenlabs_voice_metadata
 from chatgpt import send_to_chatgpt
 from play_audio import play_audio
-from sqlite_database import setup_database, store_elevenlabs_api_key, get_elevenlabs_api_key, store_openai_api_key, get_openai_api_key, view_database_entries, get_role_message, store_voice_role, voice_id_exists
+from sqlite_database import setup_database, store_elevenlabs_api_key, get_elevenlabs_api_key, store_openai_api_key, get_openai_api_key, get_role_message, set_role_message, voice_id_exists, get_server_data, append_to_message_list, set_server_data, show_table
 from voices_dictionary import voices_dictionary
 from modals import *
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='!', intents=intents)
-
-active_voice_id = ""
 
 @bot.slash_command()
 async def play(ctx):
@@ -38,9 +36,7 @@ async def play(ctx):
     await voice_client.disconnect()
 
 role_message = "Hello, I am your personal assistant. I am here to help you with your daily tasks."
-message_list = [
-            {"role": "system", "content": role_message},
-        ]
+
 
 async def once_done(sink: discord.sinks, channel: discord.TextChannel, *args):  # Our voice client already passes these in.
     
@@ -57,18 +53,20 @@ async def once_done(sink: discord.sinks, channel: discord.TextChannel, *args):  
 
         print('\nSending to ChatGPT...')
         await update_embed(ctx, '🤖 Sending to ChatGPT...', transcription=recording_transcription)
-        message_list.append({"role": "user", "content": recording_transcription})
+
+        append_to_message_list(conn, ctx.guild.id, {"role": "user", "content": recording_transcription})
+        message_list = get_server_data(conn, ctx.guild.id, 'message_list')
         chat_gpt_response = send_to_chatgpt(get_openai_api_key(conn, ctx.guild.id), message_list)
 
         print('\nSending to ElevenLabs...\n')
         await update_embed(ctx, '💬 Sending to ElevenLabs...', response=f"||{chat_gpt_response}||")
 
-        text_to_speech(chat_gpt_response, active_voice_id, get_elevenlabs_api_key(conn, ctx.guild.id))
-        message_list.append({"role": "assistant", "content": chat_gpt_response})
-        for message in message_list:
-            print(message['role'] + ': ' + message['content'])
+        text_to_speech(chat_gpt_response, get_server_data(conn, ctx.guild.id, 'active_voice_id'), get_elevenlabs_api_key(conn, ctx.guild.id))
 
-        await update_embed(ctx, '🔊 Playing audio...', )
+        append_to_message_list(conn, ctx.guild.id, {"role": "assistant", "content": chat_gpt_response})
+        message_list =  get_server_data(conn, ctx.guild.id, 'message_list')
+
+        await update_embed(ctx, '🔊 Playing audio...', response=f"{chat_gpt_response}")
         await play(ctx) # Args[0] is the voice channel context
         await update_embed(ctx, '')
     except openai.error.AuthenticationError as e:
@@ -197,18 +195,11 @@ class VoiceSelect(discord.ui.Select):
         
         print(f'Selected voice: {selected_voice_id}')
 
-        global active_voice_id
-        active_voice_id = selected_voice_id
 
-        global role_message
+        set_server_data(conn, self.ctx.guild.id, 'active_voice_id', selected_voice_id)
 
-         # set role message if get_role_message returns a message
-        the_role_message = get_role_message(conn, selected_voice_id)
-        if the_role_message is not None:
-            role_message = the_role_message
-
-        # print active_voice_id
-        print(active_voice_id)
+        # print voice_id
+        print(get_server_data(conn, self.ctx.guild.id, 'active_voice_id'))
 
         await wipe_memory(self.ctx)
 
@@ -320,12 +311,21 @@ async def update_embed(ctx, status=None, transcription=None, response=None):
 
 
 async def wipe_memory(ctx):
-    global message_list
-    global role_message
-    message_list = [
-            {"role": "system", "content": role_message},
-        ]
+    active_voice_id = get_server_data(conn, ctx.guild.id, 'active_voice_id')
+    role_message = get_role_message(conn, active_voice_id)
+
+    if role_message is None:
+
+        active_voice_name = get_elevenlabs_voice_metadata('6KOFFSnEErfEPlIDFRAG', '1704283141ae07b8be59633963340465')['name']
+        role_message = f"Respond as though you are {active_voice_name}."
+
+        # Set the role message in the database
+        set_role_message(conn, active_voice_id, ctx.guild.id, role_message)
+
+    set_server_data(conn, ctx.guild.id, 'message_list', [{"role": "system", "content": role_message}])
+
     await update_embed(ctx, transcription='-----', response='-----')
+
 
 
 @bot.slash_command()
@@ -356,50 +356,6 @@ async def edit_voice(interaction: discord.Interaction):
     """Shows an example of a modal dialog being invoked from a slash command."""
     modal = EditVoiceModal(interaction, conn)
     await interaction.send_modal(modal)
-
-
-# @bot.slash_command()
-# async def edit_voice(interaction: discord.Interaction, voice_id, new_name, new_role_message, file_url=None, labels=None):
-#     """Edit a voice from Eleven Labs Text-to-Speech API"""
-    
-#     await interaction.trigger_typing()
-
-#     # Check if the voice ID exists in the database
-
-#     if not voice_id_exists(conn, voice_id, interaction.guild.id):
-#         print(f"Voice ID {voice_id} does not exist in the database.")
-#         await interaction.respond(f"Voice ID `{voice_id}` does not exist in the database.")
-#         return
-
-#     print(f"Editing voice {voice_id}...")
-
-#     # Call the edit_voice function from eleven_labs.py file
-#     elevenlabs_api_key = get_elevenlabs_api_key(conn, interaction.guild.id)
-#     response = edit_elevenlabs_voice(elevenlabs_api_key, voice_id, new_name, file_url, labels)
-
-#     # Update the database with the new role message
-#     store_voice_role(conn, voice_id, interaction.guild.id, new_role_message)
-    
-#     # Send the response back to the user
-#     if response is not None:
-#         await interaction.respond(f"Voice `{voice_id}` edited successfully.")
-#     else:
-#         await interaction.respond("Failed to edit voice. Please check your API key and parameters.")
-
-   
-    
-# @edit_voice.error
-# async def edit_voice_error(ctx, error):
-#     if isinstance(error, discord.ext.commands.errors.MissingRequiredArgument):
-
-#         missing_param = error.param.name
-
-#         embed = discord.Embed(title="⚠️", description=f"Oops! It looks like you've forgotten to include `<{missing_param}>` in your edit_voice command.")
-#         embed.add_field(name="Usage", value="**!edit_voice** `<voice_id>` `<new_name>` `<new_role_message>` `<file_url>`", inline=False)
-#         return await ctx.send(embed=embed)
-
-
-
 
 
 conn = setup_database()
