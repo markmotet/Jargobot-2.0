@@ -198,7 +198,7 @@ class VoiceSelect(discord.ui.Select):
 class MyView(discord.ui.View):
     
     def __init__(self, ctx):
-        super().__init__()
+        super().__init__(timeout=10800)
         self.ctx = ctx
         self.is_recording = False  # Add an attribute to track the button's state
 
