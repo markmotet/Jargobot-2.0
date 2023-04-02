@@ -318,11 +318,11 @@ async def update_embed(ctx, status=None, transcription=None, response=None, bot_
 
 async def wipe_memory(ctx):
     active_voice_id = bot_state.active_voice_ids[ctx.guild.id]
-    role_message = get_role_message(conn, active_voice_id)
+    role_message = get_role_message(conn, active_voice_id, ctx.guild.id)
 
     if role_message is None:
 
-        active_voice_name = get_elevenlabs_voice_metadata('6KOFFSnEErfEPlIDFRAG', '1704283141ae07b8be59633963340465')['name']
+        active_voice_name = get_elevenlabs_voice_metadata(active_voice_id, get_elevenlabs_api_key(conn, ctx.guild.id))['name']
         role_message = f"Respond as though you are {active_voice_name}."
 
         # Set the role message in the database

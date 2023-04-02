@@ -47,9 +47,9 @@ def get_openai_api_key(conn, guild_id):
         else:
             return None
 
-def get_role_message(conn, voice_id):
+def get_role_message(conn, voice_id, guild_id):
     with conn:
-        role_message = conn.execute("SELECT role_message FROM voices WHERE voice_id=?", (voice_id,)).fetchone()
+        role_message = conn.execute("SELECT role_message FROM voices WHERE voice_id=? AND guild_id=?", (voice_id, guild_id)).fetchone()
         if role_message:
             return role_message[0]
         else:
