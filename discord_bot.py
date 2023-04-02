@@ -34,6 +34,11 @@ async def play(ctx):
         await asyncio.sleep(1)
     await voice_client.disconnect()
 
+def truncate_string(string, max_length):
+    if len(string) > max_length:
+        return string[:max_length - 3] + '...'
+    return string
+
 async def once_done(sink: discord.sinks, channel: discord.TextChannel, *args):  # Our voice client already passes these in.
     
     ctx = args[0]
@@ -55,9 +60,9 @@ async def once_done(sink: discord.sinks, channel: discord.TextChannel, *args):  
         chat_gpt_response = send_to_chatgpt(get_openai_api_key(conn, ctx.guild.id), message_list)
 
         print('\nSending to ElevenLabs...\n')
-        await update_embed(ctx, '💬 Sending to ElevenLabs...', response=f"||{chat_gpt_response}||")
+        await update_embed(ctx, '💬 Sending to ElevenLabs...', response=chat_gpt_response, spoiler=True)
 
-        text_to_speech(chat_gpt_response, bot_state.active_voice_ids[ctx.guild.id], get_elevenlabs_api_key(conn, ctx.guild.id))
+        # text_to_speech(chat_gpt_response, bot_state.active_voice_ids[ctx.guild.id], get_elevenlabs_api_key(conn, ctx.guild.id))
 
         append_to_message_list(conn, ctx.guild.id, {"role": "assistant", "content": chat_gpt_response})
         message_list =  get_server_data(conn, ctx.guild.id, 'message_list')
@@ -288,7 +293,7 @@ async def start(interaction: discord.Interaction):
     else:
         await interaction.respond("You are not connected to a voice channel.")
 
-async def update_embed(ctx, status=None, transcription=None, response=None, bot_state=bot_state):
+async def update_embed(ctx, status=None, transcription=None, response=None, bot_state=bot_state, spoiler=False):
     
     message_id = bot_state.active_embed_message_ids[ctx.channel.id]
     
@@ -305,15 +310,26 @@ async def update_embed(ctx, status=None, transcription=None, response=None, bot_
     if transcription is not None:
         embed.set_field_at(0, name='Transcription', value=transcription, inline=False)
     if response is not None:
-            if len(response) <= 1024:
-                embed.set_field_at(1, name='Response', value=response, inline=False)
-            else:
-                # Truncate the response to 1021 characters and add ellipsis to indicate it was truncated
-                response = response[:1021] + '...'
-                embed.set_field_at(1, name='Response', value=response, inline=False)
+        if len(response) > 1020:
+
+            # Truncate the response to 1018 characters
+            response = response[:1017]  
+            
+            # Recomve trailing space if it exists
+            if response[-1] == ' ':
+                response = response[:-1]
+
+            # Add ellipsis
+            response = response + '...'
+
+        if spoiler:
+            response = f"||{response}||"
+
+        embed.set_field_at(1, name='Response', value=response, inline=False)
 
     # Update the message with the modified embed
     await message.edit(embed=embed)
+
 
 
 async def wipe_memory(ctx):
