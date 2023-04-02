@@ -12,7 +12,6 @@ from eleven_labs import text_to_speech, UnauthorizedError, add_voice as add_elev
 from chatgpt import send_to_chatgpt
 from play_audio import play_audio
 from sqlite_database import setup_database, store_elevenlabs_api_key, get_elevenlabs_api_key, store_openai_api_key, get_openai_api_key, get_role_message, set_role_message, voice_id_exists, get_server_data, append_to_message_list, set_server_data, show_table
-from voices_dictionary import voices_dictionary
 from modals import *
 
 intents = discord.Intents.all()
@@ -198,9 +197,6 @@ class VoiceSelect(discord.ui.Select):
 
         set_server_data(conn, self.ctx.guild.id, 'active_voice_id', selected_voice_id)
 
-        # print voice_id
-        print(get_server_data(conn, self.ctx.guild.id, 'active_voice_id'))
-
         await wipe_memory(self.ctx)
 
 class MyView(discord.ui.View):
@@ -253,9 +249,18 @@ class MyView(discord.ui.View):
         await interaction.response.defer()
         await wipe_memory(self.ctx)
 
+class BotState:
+    def __init__(self):
+        self.active_embed_message_ids = {}
 
-message_id = 0
 
+bot_state = BotState()
+
+
+@bot.slash_command()
+async def send_test_message(interaction: discord.Interaction):
+    global test_var
+    await interaction.respond(test_var)
 
 @bot.slash_command()
 async def start(interaction: discord.Interaction):
@@ -270,22 +275,26 @@ async def start(interaction: discord.Interaction):
 
     # Start only if the user is in a voice channel
     if interaction.user.voice:
+            await interaction.respond(view=MyView(interaction))
 
-        await interaction.respond(view=MyView(interaction))
+            # Send embed with status text
+            embed = discord.Embed()
 
-        # Send embed with status text
-        embed = discord.Embed()
+            embed.add_field(name="Transcription", value="-----", inline=False)
+            embed.add_field(name="Response", value="-----", inline=False)
+            message = await interaction.respond(embed=embed)
 
-        embed.add_field(name="Transcription", value="-----", inline=False)
-        embed.add_field(name="Response", value="-----", inline=False)
-        message = await interaction.respond(embed=embed)
+            bot_state.active_embed_message_ids[interaction.channel.id] = message.id
 
-        global message_id
-        message_id = message.id
+            print("Bot state: ", bot_state.active_embed_message_ids)
+
     else:
         await interaction.respond("You are not connected to a voice channel.")
 
-async def update_embed(ctx, status=None, transcription=None, response=None):
+async def update_embed(ctx, status=None, transcription=None, response=None, bot_state=bot_state):
+    
+    message_id = bot_state.active_embed_message_ids[ctx.channel.id]
+    
     # Get the original message with the embed
     message = await ctx.channel.fetch_message(message_id)
 
