@@ -34,9 +34,6 @@ async def play(ctx):
         await asyncio.sleep(1)
     await voice_client.disconnect()
 
-role_message = "Hello, I am your personal assistant. I am here to help you with your daily tasks."
-
-
 async def once_done(sink: discord.sinks, channel: discord.TextChannel, *args):  # Our voice client already passes these in.
     
     ctx = args[0]
@@ -60,7 +57,7 @@ async def once_done(sink: discord.sinks, channel: discord.TextChannel, *args):  
         print('\nSending to ElevenLabs...\n')
         await update_embed(ctx, '💬 Sending to ElevenLabs...', response=f"||{chat_gpt_response}||")
 
-        text_to_speech(chat_gpt_response, get_server_data(conn, ctx.guild.id, 'active_voice_id'), get_elevenlabs_api_key(conn, ctx.guild.id))
+        text_to_speech(chat_gpt_response, bot_state.active_voice_ids[ctx.guild.id], get_elevenlabs_api_key(conn, ctx.guild.id))
 
         append_to_message_list(conn, ctx.guild.id, {"role": "assistant", "content": chat_gpt_response})
         message_list =  get_server_data(conn, ctx.guild.id, 'message_list')
@@ -194,8 +191,7 @@ class VoiceSelect(discord.ui.Select):
         
         print(f'Selected voice: {selected_voice_id}')
 
-
-        set_server_data(conn, self.ctx.guild.id, 'active_voice_id', selected_voice_id)
+        bot_state.active_voice_ids[self.ctx.guild.id] = selected_voice_id
 
         await wipe_memory(self.ctx)
 
@@ -252,6 +248,7 @@ class MyView(discord.ui.View):
 class BotState:
     def __init__(self):
         self.active_embed_message_ids = {}
+        self.active_voice_ids = {}
 
 
 bot_state = BotState()
@@ -320,7 +317,7 @@ async def update_embed(ctx, status=None, transcription=None, response=None, bot_
 
 
 async def wipe_memory(ctx):
-    active_voice_id = get_server_data(conn, ctx.guild.id, 'active_voice_id')
+    active_voice_id = bot_state.active_voice_ids[ctx.guild.id]
     role_message = get_role_message(conn, active_voice_id)
 
     if role_message is None:
